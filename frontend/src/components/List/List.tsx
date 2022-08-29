@@ -77,6 +77,7 @@ export class List extends React.Component<List.Props, {}> {
     const { filter } = this.state;
 
     let nodes = appState.nodes.sorted();
+    console.log('Total Nodes', nodes.length);
 
     if (filter != null) {
       nodes = nodes.filter(filter);

@@ -56,6 +56,8 @@ export class Connection {
   private static getAddress(): string {
     const ENV_URL = 'SUBSTRATE_TELEMETRY_URL';
 
+    return 'wss://telemetry.subspace.network/feed';
+
     if (process.env && process.env[ENV_URL]) {
       return process.env[ENV_URL] as string;
     }
@@ -161,8 +163,10 @@ export class Connection {
       sortByColumn =
         sortBy < 0 ? selectedColumns[~sortBy] : selectedColumns[sortBy];
     }
-
     for (const message of messages) {
+      const NUM_FAKE_COPIES = 21; // every ~21 === ~25k nodes
+      const FAKE_COPY_MULTIPLIER = 12;
+
       switch (message.action) {
         case ACTIONS.FeedVersion: {
           if (message.payload !== VERSION) {
@@ -216,6 +220,22 @@ export class Connection {
 
           nodes.add(node);
 
+          for (let i = 1; i < NUM_FAKE_COPIES + 1; i++) {
+            const fakeId = getFakeId(id, i * FAKE_COPY_MULTIPLIER);
+            const nodeCopy = new Node(
+              pinned,
+              fakeId,
+              nodeDetails,
+              nodeStats,
+              nodeIO,
+              nodeHardware,
+              blockDetails,
+              location,
+              startupTime
+            );
+            nodes.add(nodeCopy);
+          }
+
           break;
         }
 
@@ -223,6 +243,9 @@ export class Connection {
           const id = message.payload;
 
           nodes.remove(id);
+          for (let i = 1; i < NUM_FAKE_COPIES + 1; i++) {
+            nodes.remove(getFakeId(id, i * FAKE_COPY_MULTIPLIER));
+          }
 
           break;
         }
@@ -231,7 +254,11 @@ export class Connection {
           const id = message.payload;
 
           nodes.mutAndSort(id, (node) => node.setStale(true));
-
+          for (let i = 1; i < NUM_FAKE_COPIES + 1; i++) {
+            nodes.mutAndSort(getFakeId(id, i * FAKE_COPY_MULTIPLIER), (node) =>
+              node.setStale(true)
+            );
+          }
           break;
         }
 
@@ -244,6 +271,14 @@ export class Connection {
             sortByColumn === LocationColumn
           );
 
+          for (let i = 1; i < NUM_FAKE_COPIES + 1; i++) {
+            nodes.mutAndMaybeSort(
+              getFakeId(id, i * FAKE_COPY_MULTIPLIER),
+              (node) => node.updateLocation([lat, lon, city]),
+              sortByColumn === LocationColumn
+            );
+          }
+
           break;
         }
 
@@ -251,6 +286,11 @@ export class Connection {
           const [id, blockDetails] = message.payload;
 
           nodes.mutAndSort(id, (node) => node.updateBlock(blockDetails));
+          for (let i = 1; i < NUM_FAKE_COPIES + 1; i++) {
+            nodes.mutAndSort(getFakeId(id, i * FAKE_COPY_MULTIPLIER), (node) =>
+              node.updateBlock(blockDetails)
+            );
+          }
 
           break;
         }
@@ -265,6 +305,15 @@ export class Connection {
               sortByColumn === FinalizedHashColumn
           );
 
+          for (let i = 1; i < NUM_FAKE_COPIES + 1; i++) {
+            nodes.mutAndMaybeSort(
+              getFakeId(id, i * FAKE_COPY_MULTIPLIER),
+              (node) => node.updateFinalized(height, hash),
+              sortByColumn === FinalizedBlockColumn ||
+                sortByColumn === FinalizedHashColumn
+            );
+          }
+
           break;
         }
 
@@ -276,6 +325,14 @@ export class Connection {
             (node) => node.updateStats(nodeStats),
             sortByColumn === PeersColumn || sortByColumn === TxsColumn
           );
+
+          for (let i = 1; i < NUM_FAKE_COPIES + 1; i++) {
+            nodes.mutAndMaybeSort(
+              getFakeId(id, i * FAKE_COPY_MULTIPLIER),
+              (node) => node.updateStats(nodeStats),
+              sortByColumn === PeersColumn || sortByColumn === TxsColumn
+            );
+          }
 
           break;
         }
@@ -289,6 +346,14 @@ export class Connection {
             sortByColumn === UploadColumn || sortByColumn === DownloadColumn
           );
 
+          for (let i = 1; i < NUM_FAKE_COPIES + 1; i++) {
+            nodes.mutAndMaybeSort(
+              getFakeId(id, i * FAKE_COPY_MULTIPLIER),
+              (node) => node.updateHardware(nodeHardware),
+              sortByColumn === UploadColumn || sortByColumn === DownloadColumn
+            );
+          }
+
           break;
         }
 
@@ -300,6 +365,14 @@ export class Connection {
             (node) => node.updateIO(nodeIO),
             sortByColumn === StateCacheColumn
           );
+
+          for (let i = 1; i < NUM_FAKE_COPIES + 1; i++) {
+            nodes.mutAndMaybeSort(
+              getFakeId(id, i * FAKE_COPY_MULTIPLIER),
+              (node) => node.updateIO(nodeIO),
+              sortByColumn === StateCacheColumn
+            );
+          }
 
           break;
         }
@@ -554,3 +627,8 @@ function resettableTimeout(
   };
 }
 type ResettableTimeout = ReturnType<typeof resettableTimeout>;
+
+const getFakeId = (id: number, multiplier: number) => {
+  const fakeId = id * multiplier;
+  return fakeId as Types.NodeId;
+};
